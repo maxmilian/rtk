@@ -1414,6 +1414,35 @@ mod tests {
     }
 
     #[test]
+    fn test_rewrite_cat_stdin_with_incompatible_flags_skipped() {
+        // #1336: `cat -v` reading from stdin (no file arg) was crashing because
+        // the rewrite produced `rtk read -v`, which on macOS gets dispatched
+        // through `/usr/bin/read` to the bash builtin and fails with
+        // `read: -v: invalid option`. The existing flag-incompatibility check
+        // only matched when a file argument followed the flag; argument-less
+        // forms slipped through.
+        assert_eq!(rewrite_command_no_prefixes("cat -v", &[]), None);
+        assert_eq!(rewrite_command_no_prefixes("cat -A", &[]), None);
+        assert_eq!(rewrite_command_no_prefixes("cat -e", &[]), None);
+        assert_eq!(rewrite_command_no_prefixes("cat -t", &[]), None);
+        assert_eq!(rewrite_command_no_prefixes("cat -s", &[]), None);
+        assert_eq!(rewrite_command_no_prefixes("cat --show-all", &[]), None);
+        assert_eq!(rewrite_command_no_prefixes("cat -vE", &[]), None);
+    }
+
+    #[test]
+    fn test_rewrite_piped_cat_with_incompatible_flags_skipped() {
+        // #1336 real-world repro: the last segment of a pipe is `cat -v` with
+        // no file argument. The pipe rewrite path must also skip cat-with-
+        // display-flags segments rather than turn them into `rtk read -v`.
+        assert_eq!(
+            rewrite_command_no_prefixes("sed -n '1,5p' file.md | cat -v", &[]),
+            None
+        );
+        assert_eq!(rewrite_command_no_prefixes("echo test | cat -A", &[]), None);
+    }
+
+    #[test]
     fn test_rewrite_rg_pattern() {
         assert_eq!(
             rewrite_command_no_prefixes("rg \"fn main\"", &[]),
